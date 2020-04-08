@@ -3,7 +3,7 @@
 This is a work in progress. 
 If you would like to help you are more then welcome to.
 
-####***Background***
+#### ***Background***
 
 ---
 I have not been able to locate a cross platform IR library for Python. Most of the libraries available are for posix. I have not found any Python library that capable of handling Windows MCE remotes.
@@ -15,14 +15,14 @@ I have already written all of the Windows API bindings needed to interface with 
 (wrote a program that did most of the work!!!)
 
 
-####***Description***
+#### ***Description***
 
 ---
 Port of IRremoteESP8266 by @crankyoldgit to Python (https://github.com/crankyoldgit/IRremoteESP8266). 
 This library was originally based on Ken Shirriff's work (https://github.com/shirriff/Arduino-IRremote/)  
 Mark Szabo has updated the IRsend class to work on ESP8266 and Sebastien Warin the receiving &amp; decoding part (IRrecv class).
 
-####***Goals***
+#### ***Goals***
 
 ---
 When finished this library will support sending and receiving on Windows using an MCE transmitter/receiver (ehome usbcir driver)
