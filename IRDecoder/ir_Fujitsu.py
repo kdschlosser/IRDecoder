@@ -93,9 +93,10 @@ kFujitsuAcOutsideQuietOffset = 7
 kFujitsuAcCleanOffset = 3
 kFujitsuAcFilterOffset = 3
 
+from .protocol_base import ACProtocolBase
 
-class IRFujitsuAC(object):
-    def __init__(self, pin, model=ARRAH2E, inverted=False, use_modulation=True):
+class IRFujitsuAC(ACProtocolBase):
+    def __init__(self, pin, model=fujitsu_ac_remote_model_t.ARRAH2E, inverted=False, use_modulation=True):
         self.remote_state = [0x0] * kFujitsuAcStateLength
         self._temp = 0
         self._fanSpeed = 0
@@ -109,12 +110,16 @@ class IRFujitsuAC(object):
         self._clean = False
         self._filter = False
         self._irsend = IRsend(pin, inverted, use_modulation)
-        self.setModel(model)
-        self.stateReset()
+        self.mode = model
 
-    def setModel(self, model):
+    @property
+    def model(self):
+        return self._model
+
+    @model.setter
+    def model(self, model):
         self._model = model
-        if mode in (
+        if model in (
             fujitsu_ac_remote_model_t.ARDB1,
             fujitsu_ac_remote_model_t.ARJW2
         ):
@@ -127,12 +132,9 @@ class IRFujitsuAC(object):
         
         else:
             self._state_length = kFujitsuAcStateLength
-            sefl._state_length_short = kFujitsuAcStateLengthShort
-    
-    def getModel(self):
-        return self._model
+            self._state_length_short = kFujitsuAcStateLengthShort
         
-    def stateReset(self):
+    def state_reset(self):
         # Reset the state of the remote to a known good state/sequence.
         self._temp = 24
         self._fanSpeed = kFujitsuAcFanHigh
@@ -141,43 +143,36 @@ class IRFujitsuAC(object):
         self._cmd = kFujitsuAcCmdTurnOn
         self._filter = False
         self._clean = False
-        self.buildState()
+        self.build_state()
     
     def send(self, repeat=kFujitsuAcMinRepeat):
         # Send the current desired state to the IR LED.
-        self.buildState()
-        self._irsend.sendFujitsuAC(self.remote_state, self.getStateLength(), repeat)
-    
-    def calibrate(self):
-        self._irsend.calibrate()
-        
-    def begin(self):
-        # Configure the pin for output.
-        self._irsend.begin()
+        self.build_state()
+        self._irsend.sendFujitsuAC(self.remote_state, self.get_state_length(), repeat)
 
-    def stepHoriz(self):
-        self.setCmd(kFujitsuAcCmdStepHoriz)
+    def step_swing_horz(self):
+        self.set_cmd(kFujitsuAcCmdStepHoriz)
         
-    def toggleSwingHoriz(self, update=True):
+    def toggle_swing_horz(self, update=True):
         # Toggle the current setting.
         if update:
-            self.setSwing(self.getSwing() ^ kFujitsuAcSwingHoriz)
+            self._swingMode ^= kFujitsuAcSwingHoriz
             
         # and set the appropriate special command.
-        self.setCmd(kFujitsuAcCmdToggleSwingHoriz)
+        self.set_cmd(kFujitsuAcCmdToggleSwingHoriz)
         
-    def stepVert(self):
-        self.setCmd(kFujitsuAcCmdStepVert)
+    def step_vert(self):
+        self.set_cmd(kFujitsuAcCmdStepVert)
         
-    def toggleSwingVert(self, update=True):
+    def toggle_swing_vert(self, update=True):
         # Toggle the current setting.
         if update:
-            self.setSwing(self.getSwing() ^ kFujitsuAcSwingVert)
-            
+            self._swingMode ^= kFujitsuAcSwingVert
+
         # and set the appropriate special command.
-        self.setCmd(kFujitsuAcCmdToggleSwingVert)
+        self.set_cmd(kFujitsuAcCmdToggleSwingVert)
         
-    def setCmd(self, cmd):
+    def set_cmd(self, cmd):
         # Set the requested command of the A/C.
         
         if cmd in (
@@ -205,101 +200,97 @@ class IRFujitsuAC(object):
             kFujitsuAcCmdEcono,
             kFujitsuAcCmdPowerful
         ):
-            if self._model == ARREB1E:
+            if self._model == fujitsu_ac_remote_model_t.ARREB1E:
                 self._cmd = cmd
             else:
                 self._cmd = kFujitsuAcCmdStayOn
           
         else:
             self._cmd = kFujitsuAcCmdStayOn
-                
-    def getCmd(self, raw=False):
-        # Get the special command part of the message.
-        # Args:
-        #   raw: Do we need to get it from first principles from the raw data?
-        # Returns:
-        #   A uint8_t containing the contents of the special command byte.
+     
+    @property
+    def temperature(self):
+        return self._temp
 
-        if raw:
-            return self.remote_state[5]
-        else:
-            return self._cmd 
-            
-    def setTemp(self, temp):
+    @temperature.setter
+    def temperature(self, temp):
         # Set the temp. in deg C
         self._temp = max(kFujitsuAcMinTemp, temp)
         self._temp = min(kFujitsuAcMaxTemp, self._temp)
-        self.setCmd(kFujitsuAcCmdStayOn)  # No special command involved.
-        
-    def getTemp(self):
-        return self._temp
-        
-    def setFanSpeed(self, fan):        
-        # Set the speed of the fan
-        if fan > kFujitsuAcFanQuiet:
-            self._fanSpeed = kFujitsuAcFanHigh  # Set the fan to maximum if out of range.
-        else:
-            self._fanSpeed = fan
-            
-        self.setCmd(kFujitsuAcCmdStayOn)  # No special command involved.
+        self.set_cmd(kFujitsuAcCmdStayOn)  # No special command involved.
 
-    def getFanSpeed(self):
-        return self._fanSpeed
-    
-    def setMode(self, mode):
+    @property
+    def fan_speed(self):
+        return self.to_common_fan_speed(self._fanSpeed)
+
+    @fan_speed.setter
+    def fan_speed(self, value):
+        self._fanSpeed = self.to_common_fan_speed(value)
+        self.set_cmd(kFujitsuAcCmdStayOn)  # No special command involved.
+
+    @property
+    def mode(self):
+        return self.to_common_mode(self._mode)
+
+    @mode.setter
+    def mode(self, value):
+        self._mode = self.from_common_mode(value)
         # Set the requested climate operation mode of the a/c unit.
+        self.set_cmd(kFujitsuAcCmdStayOn)  # No special command involved.
 
-        if mode > kFujitsuAcModeHeat:
-            self._mode = kFujitsuAcModeHeat  # Set the mode to maximum if out of range.
-        else:
-            self._mode = mode
-            
-        self.setCmd(kFujitsuAcCmdStayOn)  # No special command involved.
-        
-    def getMode(self):
-        return self._mode
-    
-    def setSwing(self, mode):
-        # Set the requested swing operation mode of the a/c unit.
+    @property
+    def swing_vert(self):
+        if self._swingMode & kFujitsuAcSwingVert:
+            return stdAc.swingv_t.kAuto
 
-        self._swingMode = mode
+        return stdAc.swingv_t.kOff
+
+    @swing_vert.setter
+    def swing_vert(self, value):
+        if value == stdAc.swingv_t.kAuto:
+            self._swingMode |= kFujitsuAcSwingVert
+        elif value == stdAc.swingv_t.kOff:
+            self._swingMode ^= kFujitsuAcSwingVert
+
+        self.set_cmd(kFujitsuAcCmdStayOn)
+
+    @property
+    def swing_horz(self):
+        if self._model in (
+            fujitsu_ac_remote_model_t.ARREB1E,
+            fujitsu_ac_remote_model_t.ARRAH2E,
+            fujitsu_ac_remote_model_t.ARRY4
+        ):
+            return stdAc.swingh_t.kOff
+
+        if self._swingMode & kFujitsuAcSwingHoriz:
+            return stdAc.swingh_t.kAuto
+
+        return stdAc.swingh_t.kOff
+
+    @swing_horz.setter
+    def swing_horz(self, value):
         if self._model in (
             # No Horizontal support.
             fujitsu_ac_remote_model_t.ARDB1,
             fujitsu_ac_remote_model_t.ARREB1E,
             fujitsu_ac_remote_model_t.ARRY4
         ):
-            # Set the mode to max if out of range
-            if mode > kFujitsuAcSwingVert:
-                self._swingMode = kFujitsuAcSwingVert
-        elif self._model in (
-            # Has Horizontal support.
-            fujitsu_ac_remote_model_t.ARRAH2E,
-            fujitsu_ac_remote_model_t.ARJW2
-        ):
-            # Set the mode to max if out of range
-            if mode > kFujitsuAcSwingBoth:
-                self._swingMode = kFujitsuAcSwingBoth
-        
-        self.setCmd(kFujitsuAcCmdStayOn)  # No special command involved.
+            return
 
-    def getSwing(self, raw=False):
-        # Get what the swing part of the message should be.
-        # Args:
-        #   raw: Do we need to get it from first principles from the raw data?
-        # Returns:
-        #   A uint8_t containing the contents of the swing state.
-        if raw:
-            self._swingMode = GETBITS8(self.remote_state[10], kHighNibble, kFujitsuAcSwingSize)
-            
-        return self._swingMode
-    
-    def getRaw(self):
+        if value == stdAc.swingh_t.kAuto:
+            self._swingMode |= kFujitsuAcSwingHoriz
+        elif value == stdAc.swingh_t.kOff:
+            self._swingMode ^= kFujitsuAcSwingHoriz
+
+        self.set_cmd(kFujitsuAcCmdStayOn)
+
+    def get_raw(self):
         # Return a pointer to the internal state date of the remote.
-        self.buildState()
-        return self.remote_state
+        self.build_state()
+        return self.remote_state[:]
         
-    def setRaw(self, newState, length):
+    def set_raw(self, newState, length=kFujitsuAcStateLength):
         if length > kFujitsuAcStateLength:
             return False
             
@@ -309,30 +300,30 @@ class IRFujitsuAC(object):
             else:
                 self.remote_state[i] = 0
                 
-        self.buildFromState(length)
+        self.build_from_state(length)
         return True
     
-    def getStateLength(self):
-        self.buildState()  # Force an update of the internal state.
-        if (
-            (
-                self._model in (
-                    fujitsu_ac_remote_model_t.ARRAH2E,
-                    fujitsu_ac_remote_model_t.ARREB1E,
-                    fujitsu_ac_remote_model_t.ARRY4
-                ) and self.remote_state[5] != 0xFE
-            ) or
-            (
-                self._model in (fujitsu_ac_remote_model_t.ARDB1, fujitsu_ac_remote_model_t.ARJW2) and
-                self.remote_state[5] != 0xFC
-            )
-        ):
-            return self._state_length_short
-        else:
-            return self._state_length
+    def get_state_length(self):
+        self.build_state()  # Force an update of the internal state.
+        if self.remote_state[5] != 0xFE:
+            if self._model in (
+                fujitsu_ac_remote_model_t.ARRAH2E,
+                fujitsu_ac_remote_model_t.ARREB1E,
+                fujitsu_ac_remote_model_t.ARRY4
+            ):
+                return self._state_length_short
+
+        if self.remote_state[5] != 0xFC:
+            if self._model in (
+                fujitsu_ac_remote_model_t.ARDB1,
+                fujitsu_ac_remote_model_t.ARJW2
+            ):
+                return self._state_length_short
+
+        return self._state_length
     
-    @staticmethod
-    def validChecksum(state, length):
+    @classmethod
+    def valid_checksum(cls, state, length=kFujitsuAcStateLength):
         sm_complement = 0
         checksum = state[length - 1]
         if length == kFujitsuAcStateLengthShort:  # ARRAH2E, ARREB1E, & ARRY4
@@ -349,96 +340,82 @@ class IRFujitsuAC(object):
 
         return checksum == (sm_complement - sm)  # Does it match?
 
-    def setPower(self, on):
-        # Set the requested power state of the A/C.
-        self.setCmd(kFujitsuAcCmdTurnOn if on else kFujitsuAcCmdTurnOff)
-    
-    def off(self):
-        self.setPower(True)
-      
-    def on(self):
-        self.setPower(False)
-        
-    def getPower(self):
+    @property
+    def power(self):
         return self._cmd != kFujitsuAcCmdTurnOff
-    
-    def setClean(self, on):
-        self._clean = on
-        self.setCmd(kFujitsuAcCmdStayOn)  # No special command involved.
 
-    def getClean(self, raw=False):
-        if raw:
-            return GETBIT8(self.remote_state[9], kFujitsuAcCleanOffset)
-        elif self.getModel() == fujitsu_ac_remote_model_t.ARRY4:
-            return self._clean
+    @power.setter
+    def power(self, state):
+        if state:
+            state = kFujitsuAcCmdTurnOn
         else:
+            state = kFujitsuAcCmdTurnOff
+
+        # Set the requested power state of the A/C.
+        self.set_cmd(state)
+
+    @property
+    def clean(self):
+        if self.model != fujitsu_ac_remote_model_t.ARRY4:
             return False
 
-    def setFilter(self, on):
-        self._filter = on
-        self.setCmd(kFujitsuAcCmdStayOn)  # No special command involved.
+        return self._clean
 
-    def getFilter(self, raw=False):
-        if raw:
-            return GETBIT8(self.remote_state[14], kFujitsuAcFilterOffset)
-        elif self.getModel() == fujitsu_ac_remote_model_t.ARRY4:
-            return self._filter
+    @clean.setter
+    def clean(self, state):
+        if self.model != fujitsu_ac_remote_model_t.ARRY4:
+            return
+
+        if state:
+            state = True
         else:
+            state = False
+
+        self._clean = state
+        self.set_cmd(kFujitsuAcCmdStayOn)
+
+    @property
+    def filter(self):
+        if self.model != fujitsu_ac_remote_model_t.ARRY4:
             return False
-    
-    def setOutsideQuiet(self, on):
-        self._outsideQuiet = on
-        self.setCmd(kFujitsuAcCmdStayOn)  # No special command involved.
 
-    def getOutsideQuiet(self, raw=False):
-        # Get the status of the Outside Quiet setting.
-        # Args:
-        #   raw: Do we get the result from base data?
-        # Returns:
-        #   A boolean for if it is set or not.
+        return self._filter
 
-        if self._state_length == kFujitsuAcStateLength and raw:
-            self._outsideQuiet = GETBIT8(self.remote_state[14], kFujitsuAcOutsideQuietOffset)
-            
-        # Only ARREB1E seems to have this mode.
-        if self._outsideQuiet:
-            self.setModel(fujitsu_ac_remote_model_t.ARREB1E)
-            
+    @filter.setter
+    def filter(self, state):
+        if self.model != fujitsu_ac_remote_model_t.ARRY4:
+            return
+
+        if state:
+            state = True
+        else:
+            state = False
+
+        self._filter = state
+        self.set_cmd(kFujitsuAcCmdStayOn)
+
+    @property
+    def quiet(self):
+        if self.model != fujitsu_ac_remote_model_t.ARREB1E:
+            return False
+
         return self._outsideQuiet
 
-    @staticmethod
-    def convertMode(mode):
-        # Convert a standard A/C mode into its native mode.
-        if mode == stdAc.opmode_t.kCool:
-            return kFujitsuAcModeCool
-        if mode == stdAc.opmode_t.kHeat:
-            return kFujitsuAcModeHeat
-        if mode == stdAc.opmode_t.kDry:
-            return kFujitsuAcModeDry
-        if mode == stdAc.opmode_t.kFan:
-            return kFujitsuAcModeFan
+    @quiet.setter
+    def quiet(self, state):
+        if self.model != fujitsu_ac_remote_model_t.ARREB1E:
+            return
 
-        return kFujitsuAcModeAuto
-    
-    @staticmethod
-    def convertFan(speed):
-        # Convert a standard A/C Fan speed into its native fan speed.
-        if speed == stdAc.fanspeed_t.kMin:
-            return kFujitsuAcFanQuiet
-        if speed == stdAc.fanspeed_t.kLow:
-            return kFujitsuAcFanLow
-        if speed == stdAc.fanspeed_t.kMedium:
-            return kFujitsuAcFanMed
-        if speed in (
-            stdAc.fanspeed_t.kHigh,
-            stdAc.fanspeed_t.kMax
-        ):
-            return kFujitsuAcFanHigh
+        if state:
+            state = True
+        else:
+            state = False
 
-        return kFujitsuAcFanAuto
+        self._outsideQuiet = state
+        self.set_cmd(kFujitsuAcCmdStayOn)  # No special command involved.
 
-    @staticmethod
-    def toCommonMode(mode):
+    @classmethod
+    def to_common_mode(cls, mode):
         # Convert a native mode to it's common equivalent.
         if mode == kFujitsuAcModeCool:
             return stdAc.opmode_t.kCool
@@ -451,8 +428,22 @@ class IRFujitsuAC(object):
 
         return stdAc.opmode_t.kAuto
 
-    @staticmethod
-    def toCommonFanSpeed(speed):
+    @classmethod
+    def from_common_mode(cls, mode):
+        # Convert a standard A/C mode into its native mode.
+        if mode == stdAc.opmode_t.kCool:
+            return kFujitsuAcModeCool
+        if mode == stdAc.opmode_t.kHeat:
+            return kFujitsuAcModeHeat
+        if mode == stdAc.opmode_t.kDry:
+            return kFujitsuAcModeDry
+        if mode == stdAc.opmode_t.kFan:
+            return kFujitsuAcModeFan
+
+        return kFujitsuAcModeAuto
+
+    @classmethod
+    def to_common_fan_speed(cls, speed):
         # Convert a native fan speed to it's common equivalent.
         if speed == kFujitsuAcFanHigh:
             return stdAc.fanspeed_t.kMax
@@ -465,133 +456,24 @@ class IRFujitsuAC(object):
 
         return stdAc.fanspeed_t.kAuto
 
-    def toCommon(self):
-        # Convert the A/C state to it's common equivalent.
-        result = stdAc.state_t()
-        result.protocol = decode_type_t.FUJITSU_AC
-        result.model = self.getModel()
-        result.power = self.getPower()
-        result.mode = self.toCommonMode(self.getMode())
-        result.celsius = True
-        result.degrees = self.getTemp()
-        result.fanspeed = self.toCommonFanSpeed(self.getFanSpeed())
-        swing = self.getSwing()
-
-        if self._model in (
-            fujitsu_ac_remote_model_t.ARREB1E,
-            fujitsu_ac_remote_model_t.ARRAH2E,
-            fujitsu_ac_remote_model_t.ARRY4
+    @classmethod
+    def from_common_fan_speed(cls, speed):
+        # Convert a standard A/C Fan speed into its native fan speed.
+        if speed == stdAc.fanspeed_t.kMin:
+            return kFujitsuAcFanQuiet
+        if speed == stdAc.fanspeed_t.kLow:
+            return kFujitsuAcFanLow
+        if speed == stdAc.fanspeed_t.kMedium:
+            return kFujitsuAcFanMed
+        if speed in (
+                stdAc.fanspeed_t.kHigh,
+                stdAc.fanspeed_t.kMax
         ):
-            result.clean = _clean
-            result.filter = _filter
-            result.swingv = stdAc.swingv_t.kAuto if swing & kFujitsuAcSwingVert else stdAc.swingv_t.kOff
-            result.swingh = stdAc.swingh_t.kAuto if swing & kFujitsuAcSwingHoriz else stdAc.swingh_t.kOff
-        else:
-            result.swingv = stdAc.swingv_t.kOff
-            result.swingh = stdAc.swingh_t.kOff
+            return kFujitsuAcFanHigh
 
-        result.quiet = (self.getFanSpeed() == kFujitsuAcFanQuiet)
-        result.turbo = self.getCmd() == kFujitsuAcCmdPowerful
-        result.econo = self.getCmd() == kFujitsuAcCmdEcono
-        # Not supported.
-        result.light = False
-        result.filter = False
-        result.clean = False
-        result.beep = False
-        result.sleep = -1
-        result.clock = -1
-        return result
+        return kFujitsuAcFanAuto
 
-    def toString(self):
-        # Convert the internal state into a human readable string.
-        result = ""
-        model = self.getModel()
-        result += addModelToString(
-            decode_type_t.FUJITSU_AC,
-            model,
-            False
-        )
-        result += addBoolToString(self.getPower(), kPowerStr)
-        result += addModeToString(
-            self.getMode(),
-            kFujitsuAcModeAuto,
-            kFujitsuAcModeCool,
-            kFujitsuAcModeHeat,
-            kFujitsuAcModeDry,
-            kFujitsuAcModeFan
-        )
-        result += addTempToString(self.getTemp())
-        result += addFanToString(
-            self.getFanSpeed(),
-            kFujitsuAcFanHigh,
-            kFujitsuAcFanLow,
-            kFujitsuAcFanAuto,
-            kFujitsuAcFanQuiet,
-            kFujitsuAcFanMed
-        )
-
-        # These models have no internal swing, clean. or filter state.
-        if model not in (
-            fujitsu_ac_remote_model_t.ARDB1,
-            fujitsu_ac_remote_model_t.ARJW2
-        ):
-            result += addBoolToString(self.getClean(), kCleanStr)
-            result += addBoolToString(self.getFilter(), kFilterStr)
-            result += addIntToString(self.getSwing(), kSwingStr)
-            result += kSpaceLBraceStr
-            swing = self.getSwing()
-
-            if swing == kFujitsuAcSwingOff:
-                result += kOffStr
-            elif sping == kFujitsuAcSwingVert:
-                result += kSwingVStr
-            elif swing == kFujitsuAcSwingHoriz:
-                result += kSwingHStr
-            elif swing == kFujitsuAcSwingBoth:
-                result += kSwingVStr
-                result += '+'
-                result += kSwingHStr
-            else:
-                result += kUnknownStr
-
-            result += ')'
-
-        result += kCommaSpaceStr
-        result += kCommandStr
-        result += kColonSpaceStr
-
-        cmd = self.getCmd()
-
-        if cmd == kFujitsuAcCmdStepHoriz:
-            result += kStepStr
-            result += ' '
-            result += kSwingHStr
-        elif cmd == kFujitsuAcCmdStepVert:
-            result += kStepStr
-            result += ' '
-            result += kSwingVStr
-        elif cmd == kFujitsuAcCmdToggleSwingHoriz:
-            result += kToggleStr
-            result += ' '
-            result += kSwingHStr
-        elif cmd == kFujitsuAcCmdToggleSwingVert:
-            result += kToggleStr
-            result += ' '
-            result += kSwingVStr
-
-        elif cmd == kFujitsuAcCmdEcono:
-            result += kEconoStr
-        elif cmd == kFujitsuAcCmdPowerful:
-            result += kPowerfulStr
-        else:
-            result += kNAStr
-
-        if self.getModel() == fujitsu_ac_remote_model_t.ARREB1E:
-            result += addBoolToString(self.getOutsideQuiet(), kOutsideQuietStr)
-
-        return result
-
-    def buildState(self):
+    def build_state(self):
         self.remote_state[0] = 0x14
         self.remote_state[1] = 0x63
         self.remote_state[2] = 0x00
@@ -663,7 +545,7 @@ class IRFujitsuAC(object):
                     fujitsu_ac_remote_model_t.ARRAH2E,
                     fujitsu_ac_remote_model_t.ARRY4
                 ):
-                    setBit(self.remote_state[14], 5)  # |= 0b00100000
+                    setBit(self.remote_state[14], 5, 0)  # |= 0b00100000
                     setBits(self.remote_state[10], kHighNibble, kFujitsuAcSwingSize, self._swingMode)
                 
                 checksum = sumBytes(
@@ -686,51 +568,68 @@ class IRFujitsuAC(object):
                 # We don't need to do anything for the others.
                 pass
         
-        # Zero the rest of the state.
-        for i in range(self._state_length_short, kFujitsuAcStateLength):
-            self.remote_state[i] = 0
+            # Zero the rest of the state.
+            for i in range(self._state_length_short, kFujitsuAcStateLength):
+                self.remote_state[i] = 0
 
-    def buildFromState(self, length):
+    def build_from_state(self, length):
         if length in (
             kFujitsuAcStateLength - 1,
             kFujitsuAcStateLengthShort - 1
         ):
-            self.setModel(fujitsu_ac_remote_model_t.ARDB1)
+            self.model = fujitsu_ac_remote_model_t.ARDB1
             # ARJW2 has horizontal swing.
-            if self.getSwing(True) > kFujitsuAcSwingVert:
-                self.setModel(fujitsu_ac_remote_model_t.ARJW2)
-        elif self.getCmd(True) in (
+            swing_mode = GETBITS8(self.remote_state[10], kHighNibble, kFujitsuAcSwingSize)
+            
+            if swing_mode > kFujitsuAcSwingVert:
+                self.model = fujitsu_ac_remote_model_t.ARJW2
+        
+        elif self.remote_state[5] in (
             kFujitsuAcCmdEcono,
             kFujitsuAcCmdPowerful
         ):
-            self.setModel(fujitsu_ac_remote_model_t.ARREB1E)
+            self.model = fujitsu_ac_remote_model_t.ARREB1E
         else:
-            self.setModel(fujitsu_ac_remote_model_t.ARRAH2E)
+            self.model = fujitsu_ac_remote_model_t.ARRAH2E
               
         if self.remote_state[6] == 8:
-            if self.getModel() != fujitsu_ac_remote_model_t.ARJW2:
-                self.setModel(fujitsu_ac_remote_model_t.ARDB1)
+            if self.model != fujitsu_ac_remote_model_t.ARJW2:
+                self.model = fujitsu_ac_remote_model_t.ARDB1
                 
         elif self.remote_state[6] == 9:
-            if self.getModel() != fujitsu_ac_remote_model_t.ARREB1E:
-                self.setModel(fujitsu_ac_remote_model_t.ARRAH2E)
+            if self.model != fujitsu_ac_remote_model_t.ARREB1E:
+                self.model = fujitsu_ac_remote_model_t.ARRAH2E
         
-        self.setTemp((self.remote_state[8] >> 4) + kFujitsuAcMinTemp)
+        self.temperature = (self.remote_state[8] >> 4) + kFujitsuAcMinTemp
         if GETBIT8(self.remote_state[8], 0):
-            self.setCmd(kFujitsuAcCmdTurnOn)
+            self.set_cmd(kFujitsuAcCmdTurnOn)
         else:
-            self.setCmd(kFujitsuAcCmdStayOn)
+            self.set_cmd(kFujitsuAcCmdStayOn)
                 
-        self.setMode(GETBITS8(self.remote_state[9], kLowNibble, kModeBitsSize))
-        self.setFanSpeed(GETBITS8(self.remote_state[10], kLowNibble, kFujitsuAcFanSize))
-        self.setSwing(GETBITS8(self.remote_state[10], kHighNibble, kFujitsuAcSwingSize))
-        self.setClean(self.getClean(True))
-        self.setFilter(self.getFilter(True))
+        self.mode = self.to_common_mode(GETBITS8(self.remote_state[9], kLowNibble, kModeBitsSize))
+        self.fan_speed = self.to_common_fan_speed(GETBITS8(self.remote_state[10], kLowNibble, kFujitsuAcFanSize))
+        
+        swing = GETBITS8(self.remote_state[10], kHighNibble, kFujitsuAcSwingSize)
+        
+        if swing & kFujitsuAcSwingHoriz:
+            self.swing_horz = stdAc.swingh_t.kAuto
+        else:
+            self.swing_horz = stdAc.swingh_t.kOff
+        if swing & kFujitsuAcSwingVert:
+            self.swing_vert = stdAc.swingv_t.kAuto
+        else:
+            self.swing_vert = stdAc.swingv_t.kOff
+        
+        clean = GETBIT8(self.remote_state[9], kFujitsuAcCleanOffset)
+        filtr = GETBIT8(self.remote_state[14], kFujitsuAcFilterOffset)
+        
+        self.clean = clean
+        self.filter = filtr
         
         # Currently the only way we know how to tell ARRAH2E & ARRY4 apart is if
         # either the raw Filter or Clean setting is on.
-        if self.getModel() == fujitsu_ac_remote_model_t.ARRAH2E and (self.getFilter(True) or self.getClean(True)):
-            self.setModel(fujitsu_ac_remote_model_t.ARRY4)
+        if self.model == fujitsu_ac_remote_model_t.ARRAH2E and (filtr or clean):
+            self.model = fujitsu_ac_remote_model_t.ARRY4
             
         if self.remote_state[5] in (
             kFujitsuAcCmdTurnOff,
@@ -741,9 +640,17 @@ class IRFujitsuAC(object):
             kFujitsuAcCmdEcono,
             kFujitsuAcCmdPowerful
         ):
-            self.setCmd(self.remote_state[5])
-            
-        self._outsideQuiet = self.getOutsideQuiet(True)
+            self.set_cmd(self.remote_state[5])
+
+        if self._state_length == kFujitsuAcStateLength:
+            self._outsideQuiet = GETBIT8(self.remote_state[14], kFujitsuAcOutsideQuietOffset)
+
+            # Only ARREB1E seems to have this mode.
+            if self._outsideQuiet:
+                self.model = fujitsu_ac_remote_model_t.ARREB1E
+
+        else:
+            self._outsideQuiet = False
 
 
 # Send a Fujitsu A/C message.
@@ -929,7 +836,7 @@ def decodeFujitsuAC(self, results, nbits, strict):
     else:
         return False  # Unexpected size.
 
-    if not IRFujitsuAC.validChecksum(results.state, dataBitsSoFar / 8):
+    if not IRFujitsuAC.valid_checksum(results.state, dataBitsSoFar / 8):
         return False
 
     # Success

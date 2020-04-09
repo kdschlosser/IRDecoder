@@ -2,6 +2,7 @@
 
 # Copyright 2016 Massimiliano Pinto
 # Copyright 2017 David Conran
+# Copyright 2020 Kevin Schlosser
 
 from .IRrecv import *
 from .IRsend import *

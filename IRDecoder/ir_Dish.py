@@ -2,6 +2,7 @@
 
 # Copyright Todd Treece
 # Copyright 2017 David Conran
+# Copyright 2020 Kevin Schlosser
 
 from .IRrecv import *
 from .IRutils import *
@@ -53,6 +54,7 @@ kDishRptSpace = kDishRptSpaceTicks * kDishTick
 #
 # Ref:
 #   http:#www.hifi-remote.com/wiki/index.php?title=Dish
+
 def sendDISH(self, data, nbits, repeat):
     self.enable_ir_out(57600)  # Set modulation freq. to 57.6kHz.
     # Header is only ever sent once.
