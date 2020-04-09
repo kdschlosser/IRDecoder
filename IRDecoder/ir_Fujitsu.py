@@ -3,11 +3,11 @@
 # Copyright 2017 Jonny Graham
 # Copyright 2017-2019 David Conran
 
-from .IRremoteESP8266 import *
 from .IRrecv import *
-from .IRsend import *
-from .IRtext import *
 from .IRutils import *
+from .IRsend import *
+from .IRremoteESP8266 import *
+from .protocol_base import ACProtocolBase
 
 # Fujitsu A/C support added by Jonny Graham & David Conran
 
@@ -20,23 +20,6 @@ from .IRutils import *
 #  * <Add models (A/C & remotes) you've gotten it working with here>
 
 # Ref:
-# These values are based on averages of measurements
-kFujitsuAcHdrMark = 3324
-kFujitsuAcHdrSpace = 1574
-kFujitsuAcBitMark = 448
-kFujitsuAcOneSpace = 1182
-kFujitsuAcZeroSpace = 390
-kFujitsuAcMinGap = 8100
-
-addBoolToString = irutils.addBoolToString
-addIntToString = irutils.addIntToString
-addLabeledString = irutils.addLabeledString
-addModeToString = irutils.addModeToString
-addModelToString = irutils.addModelToString
-addFanToString = irutils.addFanToString
-addTempToString = irutils.addTempToString
-setBit = irutils.setBit
-setBits = irutils.setBits
 
 # Supports:
 #   Brand: Fujitsu,  Model: AR-RAH2E remote
@@ -55,6 +38,25 @@ setBits = irutils.setBits
 #   Brand: Fujitsu,  Model: ASU30C1 A/C
 
 # FUJITSU A/C support added by Jonny Graham
+
+addBoolToString = irutils.addBoolToString
+addIntToString = irutils.addIntToString
+addLabeledString = irutils.addLabeledString
+addModeToString = irutils.addModeToString
+addModelToString = irutils.addModelToString
+addFanToString = irutils.addFanToString
+addTempToString = irutils.addTempToString
+setBit = irutils.setBit
+setBits = irutils.setBits
+
+
+# These values are based on averages of measurements
+kFujitsuAcHdrMark = 3324
+kFujitsuAcHdrSpace = 1574
+kFujitsuAcBitMark = 448
+kFujitsuAcOneSpace = 1182
+kFujitsuAcZeroSpace = 390
+kFujitsuAcMinGap = 8100
 
 # Constants
 kFujitsuAcModeAuto = 0x00
@@ -93,24 +95,30 @@ kFujitsuAcOutsideQuietOffset = 7
 kFujitsuAcCleanOffset = 3
 kFujitsuAcFilterOffset = 3
 
-from .protocol_base import ACProtocolBase
 
 class IRFujitsuAC(ACProtocolBase):
-    def __init__(self, pin, model=fujitsu_ac_remote_model_t.ARRAH2E, inverted=False, use_modulation=True):
-        self.remote_state = [0x0] * kFujitsuAcStateLength
+
+    _packet_len = kFujitsuAcStateLength
+
+    def __init__(
+        self,
+        pin,
+        model=fujitsu_ac_remote_model_t.ARRAH2E,
+        inverted=False,
+        use_modulation=True
+    ):
         self._temp = 0
         self._fanSpeed = 0
         self._mode = 0
         self._swingMode = 0
         self._cmd = 0
-        self._model = 0
+        self._model = model
         self._state_length = 0
         self._state_length_short = 0
         self._outsideQuiet = False
         self._clean = False
         self._filter = False
-        self._irsend = IRsend(pin, inverted, use_modulation)
-        self.mode = model
+        ACProtocolBase.__init__(self, pin, inverted, use_modulation)
 
     @property
     def model(self):
@@ -148,7 +156,11 @@ class IRFujitsuAC(ACProtocolBase):
     def send(self, repeat=kFujitsuAcMinRepeat):
         # Send the current desired state to the IR LED.
         self.build_state()
-        self._irsend.sendFujitsuAC(self.remote_state, self.get_state_length(), repeat)
+        self._irsend.sendFujitsuAC(
+            self.remote_state,
+            self.get_state_length(),
+            repeat
+        )
 
     def step_swing_horz(self):
         self.set_cmd(kFujitsuAcCmdStepHoriz)
@@ -333,7 +345,10 @@ class IRFujitsuAC(ACProtocolBase):
             sm = sumBytes(state, length - 1)
             sm_complement = 0x9B
         elif length == kFujitsuAcStateLength:  # ARRAH2E, ARRY4, & ARREB1E
-            sm = sumBytes(state + kFujitsuAcStateLengthShort, length - 1 - kFujitsuAcStateLengthShort)
+            sm = sumBytes(
+                state + kFujitsuAcStateLengthShort,
+                length - 1 - kFujitsuAcStateLengthShort
+            )
 
         else:  # Includes ARDB1 & ARJW2 short.
             return True  # Assume the checksum is valid for other lengths.
@@ -516,7 +531,10 @@ class IRFujitsuAC(ACProtocolBase):
             self.remote_state[6] = self._state_length - 7
 
             self.remote_state[7] = 0x30
-            self.remote_state[8] = (self._cmd == kFujitsuAcCmdTurnOn) | (tempByte << 4)
+            self.remote_state[8] = (
+                (self._cmd == kFujitsuAcCmdTurnOn) |
+                (tempByte << 4)
+            )
             self.remote_state[9] = self._mode | 0 << 4  # timer off
             self.remote_state[10] = self._fanSpeed
             self.remote_state[11] = 0  # timerOff values
@@ -539,14 +557,23 @@ class IRFujitsuAC(ACProtocolBase):
                 
             else:
                 if self._model == fujitsu_ac_remote_model_t.ARREB1E:
-                    setBit(self.remote_state[14], kFujitsuAcOutsideQuietOffset, self._outsideQuiet)
+                    setBit(
+                        self.remote_state[14],
+                        kFujitsuAcOutsideQuietOffset,
+                        self._outsideQuiet
+                    )
                 
                 if self._model in (
                     fujitsu_ac_remote_model_t.ARRAH2E,
                     fujitsu_ac_remote_model_t.ARRY4
                 ):
                     setBit(self.remote_state[14], 5, 0)  # |= 0b00100000
-                    setBits(self.remote_state[10], kHighNibble, kFujitsuAcSwingSize, self._swingMode)
+                    setBits(
+                        self.remote_state[10],
+                        kHighNibble,
+                        kFujitsuAcSwingSize,
+                        self._swingMode
+                    )
                 
                 checksum = sumBytes(
                     self.remote_state + self._state_length_short, 
@@ -563,7 +590,9 @@ class IRFujitsuAC(ACProtocolBase):
                 fujitsu_ac_remote_model_t.ARREB1E
             ):
                 # The last byte is the inverse of penultimate byte
-                self.remote_state[self._state_length_short - 1] = ~self.remote_state[self._state_length_short - 2]
+                self.remote_state[self._state_length_short - 1] = (
+                    ~self.remote_state[self._state_length_short - 2]
+                )
             else:
                 # We don't need to do anything for the others.
                 pass
@@ -579,7 +608,11 @@ class IRFujitsuAC(ACProtocolBase):
         ):
             self.model = fujitsu_ac_remote_model_t.ARDB1
             # ARJW2 has horizontal swing.
-            swing_mode = GETBITS8(self.remote_state[10], kHighNibble, kFujitsuAcSwingSize)
+            swing_mode = GETBITS8(
+                self.remote_state[10],
+                kHighNibble,
+                kFujitsuAcSwingSize
+            )
             
             if swing_mode > kFujitsuAcSwingVert:
                 self.model = fujitsu_ac_remote_model_t.ARJW2
@@ -606,8 +639,12 @@ class IRFujitsuAC(ACProtocolBase):
         else:
             self.set_cmd(kFujitsuAcCmdStayOn)
                 
-        self.mode = self.to_common_mode(GETBITS8(self.remote_state[9], kLowNibble, kModeBitsSize))
-        self.fan_speed = self.to_common_fan_speed(GETBITS8(self.remote_state[10], kLowNibble, kFujitsuAcFanSize))
+        self.mode = self.to_common_mode(
+            GETBITS8(self.remote_state[9], kLowNibble, kModeBitsSize)
+        )
+        self.fan_speed = self.to_common_fan_speed(
+            GETBITS8(self.remote_state[10], kLowNibble, kFujitsuAcFanSize)
+        )
         
         swing = GETBITS8(self.remote_state[10], kHighNibble, kFujitsuAcSwingSize)
         
@@ -643,7 +680,10 @@ class IRFujitsuAC(ACProtocolBase):
             self.set_cmd(self.remote_state[5])
 
         if self._state_length == kFujitsuAcStateLength:
-            self._outsideQuiet = GETBIT8(self.remote_state[14], kFujitsuAcOutsideQuietOffset)
+            self._outsideQuiet = GETBIT8(
+                self.remote_state[14],
+                kFujitsuAcOutsideQuietOffset
+            )
 
             # Only ARREB1E seems to have this mode.
             if self._outsideQuiet:
