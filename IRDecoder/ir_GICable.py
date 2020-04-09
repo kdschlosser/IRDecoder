@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-
 # Copyright 2018 David Conran
+# Copyright 2020 Kevin Schlosser
+
 # G.I. Cable
 
 from .IRrecv import *
 from .IRsend import *
-from .IRutils import *
 
 # Ref:
 #   https:#github.com/cyborg5/IRLib2/blob/master/IRLibProtocols/IRLib_P09_GICable.h
@@ -37,8 +37,8 @@ kGicableMinGap = (
 # Status: Alpha / Untested.
 #
 # Ref:
-def sendGICable(data, nbits, repeat):
-    sendGeneric(
+def sendGICable(self, data, nbits, repeat):
+    self.send_generic(
         kGicableHdrMark,
         kGicableHdrSpace,
         kGicableBitMark,
@@ -57,7 +57,7 @@ def sendGICable(data, nbits, repeat):
     )
     # Message repeat sequence.
     if repeat:
-        sendGeneric(
+        self.send_generic(
             kGicableHdrMark,
             kGicableRptSpace,
             0,
@@ -76,6 +76,9 @@ def sendGICable(data, nbits, repeat):
         )
 
 
+IRsend.sendGICable = sendGICable
+
+
 # Decode the supplied G.I. Cable message.
 #
 # Args:
@@ -86,7 +89,7 @@ def sendGICable(data, nbits, repeat):
 #   boolean: True if it can decode it, False if it can't.
 #
 # Status: Alpha / Not tested against a real device.
-def decodeGICable(results, nbits, strict):
+def decodeGICable(self, results, nbits, strict):
     if strict and nbits != kGicableBits:
         return False  # Not strictly an GICABLE message.
 
@@ -94,7 +97,7 @@ def decodeGICable(results, nbits, strict):
     offset = kStartOffset
     # Match Header + Data + Footer
 
-    used = matchGeneric(
+    used = self.match_generic(
         results.rawbuf + offset,
         data,
         results.rawlen - offset,
@@ -117,15 +120,15 @@ def decodeGICable(results, nbits, strict):
     if strict:
         # We expect a repeat frame.
         offset += 1
-        if not matchMark(results.rawbuf[offset], kGicableHdrMark):
+        if not self.match_mark(results.rawbuf[offset], kGicableHdrMark):
             return False
 
         offset += 1
-        if not matchSpace(results.rawbuf[offset], kGicableRptSpace):
+        if not self.match_space(results.rawbuf[offset], kGicableRptSpace):
             return False
 
         offset += 1
-        if not matchMark(results.rawbuf[offset], kGicableBitMark):
+        if not self.match_mark(results.rawbuf[offset], kGicableBitMark):
             return False
 
     # Success
@@ -135,3 +138,6 @@ def decodeGICable(results, nbits, strict):
     results.command = 0
     results.address = 0
     return True
+
+
+IRrecv.decodeGICable = decodeGICable
