@@ -1,5 +1,11 @@
 # *IRDecoder*
 
+
+***DEPRECATED***
+Use this repository instead
+
+https://github.com/kdschlosser/pyIRDecoder
+
 This is a work in progress. 
 If you would like to help you are more then welcome to.
 
